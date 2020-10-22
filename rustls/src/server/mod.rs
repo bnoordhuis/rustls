@@ -318,6 +318,7 @@ pub struct ServerSessionImpl {
     pub config: Arc<ServerConfig>,
     pub common: SessionCommon,
     sni: Option<webpki::DNSName>,
+    sni_callback: Option<fn(&str)>,
     pub alpn_protocol: Option<Vec<u8>>,
     pub quic_params: Option<Vec<u8>>,
     pub received_resumption_data: Option<Vec<u8>>,
@@ -342,6 +343,7 @@ impl ServerSessionImpl {
             config: server_config.clone(),
             common: SessionCommon::new(server_config.mtu, false),
             sni: None,
+            sni_callback: None,
             alpn_protocol: None,
             quic_params: None,
             received_resumption_data: None,
@@ -500,7 +502,11 @@ impl ServerSessionImpl {
     pub fn set_sni(&mut self, value: webpki::DNSName) {
         // The SNI hostname is immutable once set.
         assert!(self.sni.is_none());
-        self.sni = Some(value)
+        self.sni = Some(value);
+
+        if let Some(sni_callback) = self.sni_callback {
+            sni_callback(self.sni.as_ref().unwrap().as_ref().into());
+        }
     }
 
     fn export_keying_material(&self,
@@ -557,6 +563,11 @@ impl ServerSession {
     /// resumption.
     pub fn get_sni_hostname(&self)-> Option<&str> {
         self.imp.get_sni().map(|s| s.as_ref().into())
+    }
+
+    /// Callback to invoke when the SNI hostname has been parsed.
+    pub fn set_sni_callback(&mut self, sni_callback: Option<fn(&str)>) {
+        self.imp.sni_callback = sni_callback;
     }
 
     /// Application-controlled portion of the resumption ticket supplied by the client, if any.
